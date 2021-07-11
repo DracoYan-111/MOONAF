@@ -1,0 +1,19 @@
+{
+  "name": "moonaf",
+  "version": "1.0.0",
+  "description": "链上祭祖",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YanLong-111/MOONAF.git"
+  },
+  "author": "LongYan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/YanLong-111/MOONAF/issues"
+  },
+  "homepage": "https://github.com/YanLong-111/MOONAF#readme"
+}
