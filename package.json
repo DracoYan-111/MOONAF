@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/YanLong-111/MOONAF/issues"
   },
-  "homepage": "https://github.com/YanLong-111/MOONAF#readme"
+  "homepage": "https://github.com/YanLong-111/MOONAF#readme",
+  "devDependencies": {
+    "hardhat": "^2.4.3"
+  }
 }
