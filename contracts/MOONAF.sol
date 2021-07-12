@@ -244,7 +244,6 @@ abstract contract Context {
     }
 }
 
-
 /**
  * @dev Collection of functions related to the address type
  */
@@ -1249,15 +1248,15 @@ contract CoinToken is Context, IERC20, Ownable {
             swapAndLiquify(contractTokenBalance);
         }
 
-        //indicates if fee should be deducted from transfer
+        //indicates if fee should be deducted from transfer 指示是否应从转账中扣除费用
         bool takeFee = true;
 
-        //if any account belongs to _isExcludedFromFee account then remove the fee
+        //if any account belongs to _isExcludedFromFee account then remove the fee 如果任何帐户属于 _isExcludedFromFee 帐户，则取消费用
         if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
             takeFee = false;
         }
 
-        //transfer amount, it will take tax, burn, liquidity fee
+        //transfer amount, it will take tax, burn, liquidity fee 转账金额，需要税费，烧钱，流动性费
         _tokenTransfer(from, to, amount, takeFee);
     }
 
@@ -1281,11 +1280,14 @@ contract CoinToken is Context, IERC20, Ownable {
 
         swapTokensForEth(half);
         // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
-
+        // <- 这会破坏 ETH -> 当交换 + 液化被触发时 HATE 交换
         // how much ETH did we just swap into?
+        // 我们刚换了多少ETH？
+        //新余额 = 当前合约余额 - 初始余额
         uint256 newBalance = address(this).balance.sub(initialBalance);
 
         // add liquidity to uniswap
+        // 为 Uniswap 增加流动性
         addLiquidity(otherHalf, newBalance);
 
         emit SwapAndLiquify(half, newBalance, otherHalf);
@@ -1344,7 +1346,7 @@ contract CoinToken is Context, IERC20, Ownable {
         if (!takeFee)
         //删除所有费用
             removeAllFee();
-        //如果 发件人 _被排除 与 接受者 _被排除
+        //如果 发件人 _被排除 与 接受者 ！ _被排除
         if (_isExcluded[sender] && !_isExcluded[recipient]) {
             //_从排除转移(发件人,接受者,数量)
             _transferFromExcluded(sender, recipient, amount);
