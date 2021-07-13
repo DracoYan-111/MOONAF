@@ -1,9 +1,6 @@
-/**
- *Submitted for verification at BscScan.com on 2021-05-22
-*/
-
-pragma solidity ^0.6.12;
 // SPDX-License-Identifier: Unlicensed
+pragma solidity ^0.6.12;
+
 interface IERC20 {
 
     function totalSupply() external view returns (uint256);
@@ -72,22 +69,6 @@ interface IERC20 {
      */
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
-
-
-
-/**
- * @dev Wrappers over Solidity's arithmetic operations with added overflow
- * checks.
- *
- * Arithmetic operations in Solidity wrap on overflow. This can easily result
- * in bugs, because programmers usually assume that an overflow raises an
- * error, which is the standard behavior in high level programming languages.
- * `SafeMath` restores this intuition by reverting the transaction when an
- * operation overflows.
- *
- * Using this library instead of the unchecked operations eliminates an entire
- * class of bugs, so it's recommended to use it always.
- */
 
 library SafeMath {
     /**
@@ -244,9 +225,6 @@ abstract contract Context {
     }
 }
 
-/**
- * @dev Collection of functions related to the address type
- */
 library Address {
     /**
      * @dev Returns true if `account` is a contract.
@@ -382,18 +360,6 @@ library Address {
     }
 }
 
-/**
- * @dev Contract module which provides a basic access control mechanism, where
- * there is an account (an owner) that can be granted exclusive access to
- * specific functions.
- *
- * By default, the owner account will be the one that deploys the contract. This
- * can later be changed with {transferOwnership}.
- *
- * This module is used through inheritance. It will make available the modifier
- * `onlyOwner`, which can be applied to your functions to restrict their use to
- * the owner.
- */
 contract Ownable is Context {
     address public _owner;
     address private _previousOwner;
@@ -460,8 +426,6 @@ contract Ownable is Context {
     }
 }
 
-// pragma solidity >=0.5.0;
-
 interface IUniswapV2Factory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
@@ -481,9 +445,6 @@ interface IUniswapV2Factory {
 
     function setFeeToSetter(address) external;
 }
-
-
-// pragma solidity >=0.5.0;
 
 interface IUniswapV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
@@ -555,8 +516,6 @@ interface IUniswapV2Pair {
 
     function initialize(address, address) external;
 }
-
-// pragma solidity >=0.6.2;
 
 interface IUniswapV2Router01 {
     function factory() external pure returns (address);
@@ -668,10 +627,6 @@ interface IUniswapV2Router01 {
     function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
-
-
-// pragma solidity >=0.6.2;
-
 interface IUniswapV2Router02 is IUniswapV2Router01 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
         address token,
@@ -715,7 +670,6 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
         uint deadline
     ) external;
 }
-
 
 contract CoinToken is Context, IERC20, Ownable {
     using SafeMath for uint256;
