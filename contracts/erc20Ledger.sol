@@ -680,6 +680,8 @@ contract swapTest is Context, IERC20, Ownable {
     string private _name;
     string private _symbol;
     uint8 private _decimals;
+    uint8 private _txFee;
+    uint256 private _tFeeTotal;
 
     mapping(address => uint256) private _rOwned;
     mapping(address => uint256) private _tOwned;
@@ -694,12 +696,13 @@ contract swapTest is Context, IERC20, Ownable {
      * All three of these values are immutable: they can only be set once during
      * construction.
      */
-    constructor (string memory name_, string memory symbol_, uint256 count) public {
+    constructor (string memory name_, string memory symbol_, uint256 count_, uint8 txFee_) public {
+        _decimals = 18;
         _name = name_;
         _symbol = symbol_;
-        _decimals = 18;
-        _totalSupply = count;
-        _mint(_msgSender(),_totalSupply);
+        _totalSupply = count_;
+        _mint(_msgSender(), _totalSupply);
+        _txFee = txFee_;
         // 设置其余的合约变量
         /*IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(routerAddress);
         // 为这个新令牌创建一个 uniswap 对
@@ -751,7 +754,7 @@ contract swapTest is Context, IERC20, Ownable {
      * @dev See {IERC20-balanceOf}.
      */
     function balanceOf(address account) public view virtual override returns (uint256) {
-        return _balances[account]/2;
+        return _balances[account] / _tFeeTotal;
     }
 
     /**
@@ -858,12 +861,18 @@ contract swapTest is Context, IERC20, Ownable {
     function _transfer(address sender, address recipient, uint256 amount) internal virtual {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
-
         _beforeTokenTransfer(sender, recipient, amount);
         _balances[sender] = balanceOf(sender);
-        _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
-        _balances[recipient] = _balances[recipient].add(amount);
-        emit Transfer(sender, recipient, amount);
+        (uint256 _count,uint256 _total) = _handlingFee(amount);
+        _tFeeTotal += _total;
+        _balances[sender] = _balances[sender].sub(_count, "ERC20: transfer amount exceeds balance");
+        _balances[recipient] = _balances[recipient].add(_count);
+        emit Transfer(sender, recipient, _count);
+    }
+
+
+    function _handlingFee(uint256 amount) internal virtual returns (uint256, uint256) {
+        return (amount.mul(_txFee).div(10 ** 2), amount.sub(amount.mul(_txFee).div(10 ** 2)));
     }
 
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
