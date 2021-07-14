@@ -694,11 +694,11 @@ contract swapTest is Context, IERC20, Ownable {
      * All three of these values are immutable: they can only be set once during
      * construction.
      */
-    constructor (string memory name_, string memory symbol_, address routerAddress) public {
+    constructor (string memory name_, string memory symbol_, uint256 count, address routerAddress) public {
         _name = name_;
         _symbol = symbol_;
         _decimals = 18;
-
+        _totalSupply = count * 10 ** _decimals;
         // 设置其余的合约变量
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(routerAddress);
         // 为这个新令牌创建一个 uniswap 对

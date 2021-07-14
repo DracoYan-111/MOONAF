@@ -912,7 +912,7 @@ contract CoinToken is Context, IERC20, Ownable {
         //帐户 _被排除，否则：帐户已被排除
         require(_isExcluded[account], "Account is already excluded");
         //循环 _排除长度
-        for (uint256 i = 0; i < _excluded.length; i++) {
+        for (uint256 i = 0 ; i < _excluded.length; i++) {
             //如果 i _排除 = 账户
             if (_excluded[i] == account) {
                 // i _排除 = _排除长度 - 1 _排除
