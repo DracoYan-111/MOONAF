@@ -700,7 +700,6 @@ contract swapTest is Context, IERC20, Ownable {
         _decimals = 18;
         _name = name_;
         _symbol = symbol_;
-        _totalSupply = count_;
         _mint(_msgSender(), _totalSupply);
         _txFee = txFee_;
         // 设置其余的合约变量
@@ -754,9 +753,14 @@ contract swapTest is Context, IERC20, Ownable {
      * @dev See {IERC20-balanceOf}.
      */
     function balanceOf(address account) public view virtual override returns (uint256) {
-        return _balances[account] / _tFeeTotal;
+        return setBalanceOf(account);
     }
 
+    function setBalanceOf(address account) private view returns (uint256) {
+        uint256 a = (_balances[account] / _totalSupply) * _decimals;
+        return (a * _tFeeTotal) / _decimals;
+
+    }
     /**
      * @dev See {IERC20-transfer}.
      *
