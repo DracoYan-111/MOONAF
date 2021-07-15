@@ -426,7 +426,7 @@ contract Ownable is Context {
     }
 }
 
-interface IUniswapV2Factory {
+/*interface IUniswapV2Factory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
     function feeTo() external view returns (address);
@@ -669,717 +669,315 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
         address to,
         uint deadline
     ) external;
-}
+}*/
 
-contract CoinToken is Context, IERC20, Ownable {
+contract ERC20 is Context, IERC20 {
     using SafeMath for uint256;
-    using Address for address;
 
-    mapping(address => uint256) private _rOwned;
-    mapping(address => uint256) private _tOwned;
-    mapping(address => mapping(address => uint256)) private _allowances;
-    //_被排除在费用之外
-    mapping(address => bool) private _isExcludedFromFee;
-    //_被排除
-    mapping(address => bool) private _isExcluded;
-    //_排除
-    address[] private _excluded;
 
-    uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal;
-    //_r总计
-    uint256 private _rTotal;
-    //_t总费用
-    uint256 private _tFeeTotal;
 
+    mapping (address => mapping (address => uint256)) private _allowances;
+
+    uint256 private _totalSupply;
+    uint256 private _userSupply;
+    mapping (address => uint256) private _balances;
+    mapping(address => uint256) private _totalOwned;
     string private _name;
     string private _symbol;
     uint256 private _decimals;
-    //税费
-    uint256 public _taxFee;
-    //_以前的税费
-    uint256 private _previousTaxFee;
-    //_流动资金费
-    uint256 public _liquidityFee;
-    //_先前的流动资金费用
-    uint256 private _previousLiquidityFee;
-
-    IUniswapV2Router02 public immutable uniswapV2Router;
-    address public immutable uniswapV2Pair;
-    //在交换和液化
-    bool inSwapAndLiquify;
-    //交换和液化启用
-    bool public swapAndLiquifyEnabled = true;
-    //_max 交易金额
-    uint256 public _maxTxAmount;
-    //出售 num 代币以增加流动性
-    uint256 public numTokensSellToAddToLiquidity;
-    //============================== 事件 ==============================
-    //交换前的最小代币更新
-    event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
-    //交换和液化已启用更新
-    event SwapAndLiquifyEnabledUpdated(bool enabled);
-    //交换和液化
-    event SwapAndLiquify(
-        uint256 tokensSwapped,
-        uint256 ethReceived,
-        uint256 tokensIntoLiqudity
-    );
-    //锁掉
-    modifier lockTheSwap {
-        inSwapAndLiquify = true;
-        _;
-        inSwapAndLiquify = false;
-    }
-
-    constructor (string memory _NAME, string memory _SYMBOL, uint256 _DECIMALS, uint256 _supply, uint256 _txFee, uint256 _lpFee, uint256 _MAXAMOUNT, uint256 SELLMAXAMOUNT, address routerAddress, address tokenOwner) public {
+    uint256 private _taxFee;
+    uint256 private constant MAX = ~uint256(0);
+    /**
+     * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
+     * a default value of 18.
+     *
+     * To select a different value for {decimals}, use {_setupDecimals}.
+     *
+     * All three of these values are immutable: they can only be set once during
+     * construction.
+     */
+    constructor (string memory _NAME, string memory _SYMBOL, uint256 _DECIMALS, uint256 _SUPPLY, uint256 _TXFEE) public {
         _name = _NAME;
         _symbol = _SYMBOL;
         _decimals = _DECIMALS;
-        _tTotal = _supply * 10 ** _decimals;
-        _rTotal = (MAX - (MAX % _tTotal));
-        _taxFee = _txFee;
-        _liquidityFee = _lpFee;
-        _previousTaxFee = _txFee;
-        _previousLiquidityFee = _lpFee;
-        _maxTxAmount = _MAXAMOUNT * 10 ** _decimals;
-        numTokensSellToAddToLiquidity = SELLMAXAMOUNT * 10 ** _decimals;
 
-
-        _rOwned[tokenOwner] = _rTotal;
-
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(routerAddress);
-        // Create a uniswap pair for this new token 为这个新令牌创建一个 uniswap 对
-        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
-        .createPair(address(this), _uniswapV2Router.WETH());
-
-        // set the rest of the contract variables 设置其余的合约变量
-        uniswapV2Router = _uniswapV2Router;
-
-        //exclude owner and this contract from fee 从费用中排除所有者和本合同
-        _isExcludedFromFee[tokenOwner] = true;
-        _isExcludedFromFee[address(this)] = true;
-
-        _owner = tokenOwner;
-        emit Transfer(address(0), tokenOwner, _tTotal);
+        _taxFee = _TXFEE;
+        _totalSupply = _SUPPLY * 10 ** _decimals;
+        _userSupply = MAX - (MAX % _totalSupply);
+        _totalOwned[msg.sender] = _totalOwned[msg.sender].add(_totalSupply);
+        _mint(_msgSender(),_userSupply);
     }
 
-
-    function name() public view returns (string memory) {
+    /**
+     * @dev Returns the name of the token.
+     */
+    function name() public view virtual returns (string memory) {
         return _name;
     }
 
-    function symbol() public view returns (string memory) {
+    /**
+     * @dev Returns the symbol of the token, usually a shorter version of the
+     * name.
+     */
+    function symbol() public view virtual returns (string memory) {
         return _symbol;
     }
 
-    function decimals() public view returns (uint256) {
+    /**
+     * @dev Returns the number of decimals used to get its user representation.
+     * For example, if `decimals` equals `2`, a balance of `505` tokens should
+     * be displayed to a user as `5,05` (`505 / 10 ** 2`).
+     *
+     * Tokens usually opt for a value of 18, imitating the relationship between
+     * Ether and Wei. This is the value {ERC20} uses, unless {_setupDecimals} is
+     * called.
+     *
+     * NOTE: This information is only used for _display_ purposes: it in
+     * no way affects any of the arithmetic of the contract, including
+     * {IERC20-balanceOf} and {IERC20-transfer}.
+     */
+    function decimals() public view virtual returns (uint256) {
         return _decimals;
     }
-    //总供应量
-    function totalSupply() public view override returns (uint256) {
-        return _tTotal;
+
+    /**
+     * @dev See {IERC20-totalSupply}.
+     */
+    function totalSupply() public view virtual override returns (uint256) {
+        return _totalSupply;
     }
 
-    //余额
-    //帐户
-    function balanceOf(address account) public view override returns (uint256) {
-        if (_isExcluded[account]) return _tOwned[account];
-        return tokenFromReflection(_rOwned[account]);
+    /**
+     * @dev See {IERC20-balanceOf}.
+     */
+    function balanceOf(address account) public view virtual override returns (uint256) {
+        return _balances[account] / (_userSupply / _totalSupply);
     }
 
-    //转账给
-    //接受者 数量
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
+    /**
+     * @dev See {IERC20-transfer}.
+     *
+     * Requirements:
+     *
+     * - `recipient` cannot be the zero address.
+     * - the caller must have a balance of at least `amount`.
+     */
+    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
         _transfer(_msgSender(), recipient, amount);
         return true;
     }
 
-    //批准数量
-    //所有者 捐赠者
-    function allowance(address owner, address spender) public view override returns (uint256) {
+    /**
+     * @dev See {IERC20-allowance}.
+     */
+    function allowance(address owner, address spender) public view virtual override returns (uint256) {
         return _allowances[owner][spender];
     }
 
-    //批准
-    //捐赠者 数量
-    function approve(address spender, uint256 amount) public override returns (bool) {
+    /**
+     * @dev See {IERC20-approve}.
+     *
+     * Requirements:
+     *
+     * - `spender` cannot be the zero address.
+     */
+    function approve(address spender, uint256 amount) public virtual override returns (bool) {
         _approve(_msgSender(), spender, amount);
         return true;
     }
 
-    //某人转账给
-    //发件人 接受者 数量
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
+    /**
+     * @dev See {IERC20-transferFrom}.
+     *
+     * Emits an {Approval} event indicating the updated allowance. This is not
+     * required by the EIP. See the note at the beginning of {ERC20}.
+     *
+     * Requirements:
+     *
+     * - `sender` and `recipient` cannot be the zero address.
+     * - `sender` must have a balance of at least `amount`.
+     * - the caller must have allowance for ``sender``'s tokens of at least
+     * `amount`.
+     */
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
         _transfer(sender, recipient, amount);
         _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
         return true;
     }
 
-    //增加批准数量
-    // 捐赠者 附加价值
+    /**
+     * @dev Atomically increases the allowance granted to `spender` by the caller.
+     *
+     * This is an alternative to {approve} that can be used as a mitigation for
+     * problems described in {IERC20-approve}.
+     *
+     * Emits an {Approval} event indicating the updated allowance.
+     *
+     * Requirements:
+     *
+     * - `spender` cannot be the zero address.
+     */
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
         return true;
     }
 
-    //减少批准数量
-    //捐赠者 减去值
+    /**
+     * @dev Atomically decreases the allowance granted to `spender` by the caller.
+     *
+     * This is an alternative to {approve} that can be used as a mitigation for
+     * problems described in {IERC20-approve}.
+     *
+     * Emits an {Approval} event indicating the updated allowance.
+     *
+     * Requirements:
+     *
+     * - `spender` cannot be the zero address.
+     * - `spender` must have allowance for the caller of at least
+     * `subtractedValue`.
+     */
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
         return true;
     }
 
-    //被排除在奖励之外
-    //帐户
-    function isExcludedFromReward(address account) public view returns (bool) {
-        return _isExcluded[account];
-    }
+    /**
+     * @dev Moves tokens `amount` from `sender` to `recipient`.
+     *
+     * This is internal function is equivalent to {transfer}, and can be used to
+     * e.g. implement automatic token fees, slashing mechanisms, etc.
+     *
+     * Emits a {Transfer} event.
+     *
+     * Requirements:
+     *
+     * - `sender` cannot be the zero address.
+     * - `recipient` cannot be the zero address.
+     * - `sender` must have a balance of at least `amount`.
+     */
+    function _transfer(address sender, address recipient, uint256 amount) internal virtual {
+        require(sender != address(0), "ERC20: transfer from the zero address");
+        require(recipient != address(0), "ERC20: transfer to the zero address");
 
-    //总费用
-    function totalFees() public view returns (uint256) {
-        return _tFeeTotal;
-    }
-
-    //交付
-    //t金额
-    function deliver(uint256 tAmount) public {
-        address sender = _msgSender();
-        //排除的地址无法调用此函数
-        //如果 当前合约调用者 不是 _被排除， 否则：排除的地址无法调用此函数
-        require(!_isExcluded[sender], "Excluded addresses cannot call this function");
-        //r金额 = _获取值
-        (uint256 rAmount,,,,,) = _getValues(tAmount);
-        //_r拥有[当前合约调用者] = _r拥有[当前合约调用者] - r金额
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        //_r总计 = _r总计 - r金额
-        _rTotal = _rTotal.sub(rAmount);
-        //_t总费用 = _t总费用 + r金额
-        _tFeeTotal = _tFeeTotal.add(tAmount);
-    }
-
-    //来自令牌的反射
-    //t金额 扣除转会费
-    function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
-        //如果 t金额 <= _r总计 , 否则：金额必须少于供应量
-        require(tAmount <= _tTotal, "Amount must be less than supply");
-        // 不是 扣除转会费
-        if (!deductTransferFee) {
-            //r金额 = _获取值
-            (uint256 rAmount,,,,,) = _getValues(tAmount);
-            //返回 r金额
-            return rAmount;
-            //是 扣除转会费
-        } else {
-            //r转账金额 = _获取值
-            (,uint256 rTransferAmount,,,,) = _getValues(tAmount);
-            //返回 r转账金额
-            return rTransferAmount;
-        }
-    }
-
-    //来自反射的令牌
-    //r金额
-    function tokenFromReflection(uint256 rAmount) public view returns (uint256) {
-        //如果 r金额 <= _r 总计 , 否则：数量必须小于全反射
-        require(rAmount <= _rTotal, "Amount must be less than total reflections");
-        //当前利率 = _获取速率
-        uint256 currentRate = _getRate();
-        //返回 r金额 / 当前利率
-        return rAmount.div(currentRate);
-    }
-
-    //从奖励中排除
-    //帐户
-    function excludeFromReward(address account) public onlyOwner() {
-        // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Uniswap router.');
-        //如果 帐户 不是 _被排除，否则：帐户已被排除
-        require(!_isExcluded[account], "Account is already excluded");
-        //如果  账户 _r拥有 大于 0
-        if (_rOwned[account] > 0) {
-            //账户 _t拥有 = 来自反射的令牌(账户 _r拥有)
-            _tOwned[account] = tokenFromReflection(_rOwned[account]);
-        }
-        //账户 _被排除 = true
-        _isExcluded[account] = true;
-        //_排除 添加 账户
-        _excluded.push(account);
-    }
-
-    //包括在奖励中
-    //帐户
-    function includeInReward(address account) external onlyOwner() {
-        //帐户 _被排除，否则：帐户已被排除
-        require(_isExcluded[account], "Account is already excluded");
-        //循环 _排除长度
-        for (uint256 i = 0 ; i < _excluded.length; i++) {
-            //如果 i _排除 = 账户
-            if (_excluded[i] == account) {
-                // i _排除 = _排除长度 - 1 _排除
-                _excluded[i] = _excluded[_excluded.length - 1];
-                //账户 _t拥有 = 0
-                _tOwned[account] = 0;
-                // 账户 _是排除 = false
-                _isExcluded[account] = false;
-                //_排除 减少长度
-                _excluded.pop();
-                //停止循环
-                break;
-            }
-        }
-    }
-
-    //_转账两者都排除
-    //发件人 接受者 t金额
-    function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-        //r金额,r转账金额,r费用,t转账金额,t费用,t流动性 = _获取值
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
-        //发件人 _t拥有 = 发件人 _t拥有 - t金额
-        _tOwned[sender] = _tOwned[sender].sub(tAmount);
-        //发件人 _r拥有 = 发件人 _r拥有 - r金额
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        //接受者 _t拥有 = 接受者 _t拥有 + t转账金额
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        //接受者 _r拥有 = 接受者 _r拥有 + r转账金额
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        //_取流动性(t流动性)
-        _takeLiquidity(tLiquidity);
-        //_反映费用(r费用，t费用)
-        _reflectFee(rFee, tFee);
-        //触发转账事件(发件人，接受者，t转账金额)
+        _beforeTokenTransfer(sender, recipient, amount);
+        (uint256 rAmount, uint256 rTransferAmount,,uint256 tTransferAmount,uint256 rFee) = _getValues(amount);
+        _totalOwned[sender] = _totalOwned [sender].sub(amount);
+        _balances[sender] = _balances[sender].sub(rAmount);
+        _totalOwned[recipient] = _totalOwned[recipient].add(tTransferAmount);
+        _balances[recipient] = _balances[recipient].add(rTransferAmount);
+        _reflectFee(rFee);
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    //从费用中排除
-    //帐户
-    function excludeFromFee(address account) public onlyOwner {
-        //账户 _被排除在费用之外 = true
-        _isExcludedFromFee[account] = true;
+    /** @dev Creates `amount` tokens and assigns them to `account`, increasing
+     * the total supply.
+     *
+     * Emits a {Transfer} event with `from` set to the zero address.
+     *
+     * Requirements:
+     *
+     * - `to` cannot be the zero address.
+     */
+    function _mint(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: mint to the zero address");
+
+        _beforeTokenTransfer(address(0), account, amount);
+
+        //_totalSupply = _totalSupply.add(amount);
+        _balances[account] = _balances[account].add(amount);
+        emit Transfer(address(0), account, amount);
     }
 
-    //包括费用
-    //帐户
-    function includeInFee(address account) public onlyOwner {
-        //账户 _是排除 = false
-        _isExcludedFromFee[account] = false;
+    /**
+     * @dev Destroys `amount` tokens from `account`, reducing the
+     * total supply.
+     *
+     * Emits a {Transfer} event with `to` set to the zero address.
+     *
+     * Requirements:
+     *
+     * - `account` cannot be the zero address.
+     * - `account` must have at least `amount` tokens.
+     */
+    function _burn(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: burn from the zero address");
+
+        _beforeTokenTransfer(account, address(0), amount);
+
+        _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+        //_totalSupply = _totalSupply.sub(amount);
+        emit Transfer(account, address(0), amount);
     }
 
-    //设置税费百分比
-    //税费
-    function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
-        //_税费 = 税费
-        _taxFee = taxFee;
-    }
-
-    //设置流动性费用百分比
-    //流动性费
-    function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
-        //_流动资金费 = 流动性费
-        _liquidityFee = liquidityFee;
-    }
-
-    //设置Num代币出售以增加流动性
-    //交换号码
-    function setNumTokensSellToAddToLiquidity(uint256 swapNumber) public onlyOwner {
-        //出售num代币以增加流动性 = 交换号码 * 10 ** _小数点
-        numTokensSellToAddToLiquidity = swapNumber * 10 ** _decimals;
-    }
-
-    //设置最大Tx百分比
-    //最大Tx百分比
-    function setMaxTxPercent(uint256 maxTxPercent) public onlyOwner {
-        //_max交易金额 = 最大Tx百分比 * 10 **  _小数点
-        _maxTxAmount = maxTxPercent * 10 ** _decimals;
-    }
-
-    //设置交换和液化启用
-    //_启用
-    function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
-        //交换和液化启用 = _启用
-        swapAndLiquifyEnabled = _enabled;
-        //触发 交换和液化已启用更新 事件(_启用)
-        emit SwapAndLiquifyEnabledUpdated(_enabled);
-    }
-
-    //to recieve ETH from uniswapV2Router when swaping
-    //交换时从 uniswapV2Router 接收 ETH
-    receive() external payable {}
-
-    //_反映费用
-    // r费用 t费用
-    function _reflectFee(uint256 rFee, uint256 tFee) private {
-        //_r总计 = _r总计 - r费用
-        _rTotal = _rTotal.sub(rFee);
-        //_t总费用 = _t总费用 + t费用
-        _tFeeTotal = _tFeeTotal.add(tFee);
-    }
-
-    //_获取值
-    //t金额
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
-        //_获取T值
-        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getTValues(tAmount);
-        //_获取R值
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
-        //返回(t金额,r转账金额,r费用,t转账金额,t费用,t流动性)
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity);
-    }
-
-    //获取T值
-    //t金额
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256) {
-        //t费用 = 计算税费
-        uint256 tFee = calculateTaxFee(tAmount);
-        //t流动性 = 计算流动性费用
-        uint256 tLiquidity = calculateLiquidityFee(tAmount);
-        //t转账金额 = t金额 - t费用 - t流动性
-        uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity);
-        //返回(t转账金额，t费用，t流动性)
-        return (tTransferAmount, tFee, tLiquidity);
-    }
-
-    //_获取R值
-    //t金额 t费用 t费用 t流动性 当前利率
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
-        //r金额 = t金额 * 当前利率
-        uint256 rAmount = tAmount.mul(currentRate);
-        //r费用 = t费用 * 当前利率
-        uint256 rFee = tFee.mul(currentRate);
-        //r流动性 = 流动性 * 当前利率
-        uint256 rLiquidity = tLiquidity.mul(currentRate);
-        //r转账金额 = r金额 - r费用 - r流动性
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity);
-        //返回 (r金额,r转账金额,r费用)
-        return (rAmount, rTransferAmount, rFee);
-    }
-
-    //_获取速率
-    function _getRate() private view returns (uint256) {
-        //r供应，t供应 = _排除
-        (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
-        // 返回 r供应 / t供应
-        return rSupply.div(tSupply);
-    }
-
-    //_获取当前供应
-    function _getCurrentSupply() private view returns (uint256, uint256) {
-        //r供应 = _r总计
-        uint256 rSupply = _rTotal;
-        //t供应 = _t总计
-        uint256 tSupply = _tTotal;
-        //循环 _排除 数组
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            //如果 _r拥有[_排除[i]]>r供应 或者 _t拥有[_排除[i]] > t供应 返回 _r供应 _t供应
-            if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) return (_rTotal, _tTotal);
-            //r供应 = r供应 - _r拥有[_排除[i]]
-            rSupply = rSupply.sub(_rOwned[_excluded[i]]);
-            //t供应 = t供应 - _t拥有[_排除[i]]
-            tSupply = tSupply.sub(_tOwned[_excluded[i]]);
-        }
-        //如果 r供应 <_r总计 /_t总计 返回_r总计，_t总计
-        if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
-        //返回 (r供应，t供应)
-        return (rSupply, tSupply);
-    }
-
-    //_取流动性
-    //t流动性
-    function _takeLiquidity(uint256 tLiquidity) private {
-        //当前利率 = _获取速率
-        uint256 currentRate = _getRate();
-        //r流动性 = t流动性 *　当前利率
-        uint256 rLiquidity = tLiquidity.mul(currentRate);
-        //当前合约 _r拥有者 = 当前合约 _r拥有者 +　r流动性
-        _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
-        //如果 当前合约 _是排除
-        if (_isExcluded[address(this)])
-        //当前合约 _t拥有者 = 当前合约 _t拥有者 + t流动性
-            _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
-    }
-
-    //索取代币
-    function claimTokens() public onlyOwner {
-        payable(_owner).transfer(address(this).balance);
-    }
-    //计算税费
-    //_数量
-    function calculateTaxFee(uint256 _amount) private view returns (uint256) {
-        //_数量 * 税费 / 100
-        return _amount.mul(_taxFee).div(10 ** 2);
-    }
-
-    //计算流动性费用
-    //_数量
-    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
-        //_数量 * _流动资金费 / 100
-        return _amount.mul(_liquidityFee).div(10 ** 2);
-    }
-
-    //删除所有费用
-    function removeAllFee() private {
-        //如果 _税费 == 0 与 _流动资金费 ==0 返回
-        if (_taxFee == 0 && _liquidityFee == 0) return;
-
-        //_以前的税费 = _税费
-        _previousTaxFee = _taxFee;
-        //_先前的流动资金费用 = _流动资金费
-        _previousLiquidityFee = _liquidityFee;
-
-        //_税费 = 0
-        _taxFee = 0;
-        //_流动资金费 = 0
-        _liquidityFee = 0;
-    }
-
-    //恢复所有费用
-    function restoreAllFee() private {
-        //_税费 = _以前的税费
-        _taxFee = _previousTaxFee;
-        //_流动资金费 = _先前的流动资金费用
-        _liquidityFee = _previousLiquidityFee;
-    }
-
-    //不收费
-    //帐户
-    function isExcludedFromFee(address account) public view returns (bool) {
-        //账户 _被排除在费用之外
-        return _isExcludedFromFee[account];
-    }
-
-    //_批准
-    // 所有者 捐赠者 数量
-    function _approve(address owner, address spender, uint256 amount) private {
-        //如果 所有者 != 空地址 ，否则：从零地址批准
+    /**
+     * @dev Sets `amount` as the allowance of `spender` over the `owner` s tokens.
+     *
+     * This internal function is equivalent to `approve`, and can be used to
+     * e.g. set automatic allowances for certain subsystems, etc.
+     *
+     * Emits an {Approval} event.
+     *
+     * Requirements:
+     *
+     * - `owner` cannot be the zero address.
+     * - `spender` cannot be the zero address.
+     */
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
         require(owner != address(0), "ERC20: approve from the zero address");
-        //如果 捐赠者 != 空地址 否则：同意零地址
         require(spender != address(0), "ERC20: approve to the zero address");
 
-        //所有者 捐赠者 _津贴 = 数量
         _allowances[owner][spender] = amount;
-        //触发 批准事件(所有者,捐赠者，数量)
         emit Approval(owner, spender, amount);
     }
 
-    //_转账
-    //从 至 数量
-    function _transfer(address from, address to, uint256 amount) private {
-        //如果 从 != 空地址 否则：从零地址转账
-        require(from != address(0), "ERC20: transfer from the zero address");
-        //如果 至 != 空地址 否则：转移到零地址
-        require(to != address(0), "ERC20: transfer to the zero address");
-        // 如果 数量 > 0 否则：转账金额必须大于零
-        require(amount > 0, "Transfer amount must be greater than zero");
-        //如果 从 != 所有者 与 至 != 所有者
-        if (from != owner() && to != owner())
-        //如果 数量 <= _max交易金额 否则：转账金额超过max交易金额
-            require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
-
-        // is the token balance of this contract address over the min number of 是这个合约地址的代币余额超过最小数量
-        // tokens that we need to initiate a swap + liquidity lock? 我们需要启动掉期+流动性锁定的代币？
-        // also, don't get caught in a circular liquidity event. 另外，不要陷入循环流动性事件中。
-        // also, don't swap & liquify if sender is uniswap pair. 另外，如果发件人是单交换对，则不要交换和液化。
-        // 合约代币余额 = 余额(当前合约)
-        uint256 contractTokenBalance = balanceOf(address(this));
-        //如果 合约代币余额 >= _max交易金额
-        if (contractTokenBalance >= _maxTxAmount) {
-            //合约代币余额 = _max交易金额
-            contractTokenBalance = _maxTxAmount;
-        }
-
-        //超过最小代币余额 = 合约代币余额 >= 出售 num 代币以增加流动性
-        bool overMinTokenBalance = contractTokenBalance >= numTokensSellToAddToLiquidity;
-        //如果 超过最小代币余额 && !在交换和液化 && 从 != uniswapV2Pair && 交换和液化启用
-        if (
-            overMinTokenBalance &&
-            !inSwapAndLiquify &&
-            from != uniswapV2Pair &&
-            swapAndLiquifyEnabled
-        ) {
-            //合约代币余额 = 出售num代币以增加流动性
-            contractTokenBalance = numTokensSellToAddToLiquidity;
-            //add liquidity
-            //增加流动性
-            swapAndLiquify(contractTokenBalance);
-        }
-
-        //indicates if fee should be deducted from transfer 指示是否应从转账中扣除费用
-        bool takeFee = true;
-
-        //if any account belongs to _isExcludedFromFee account then remove the fee 如果任何帐户属于 _isExcludedFromFee 帐户，则取消费用
-        if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
-            takeFee = false;
-        }
-
-        //transfer amount, it will take tax, burn, liquidity fee 转账金额，需要税费，烧钱，流动性费
-        _tokenTransfer(from, to, amount, takeFee);
+    /**
+     * @dev Sets {decimals} to a value other than the default one of 18.
+     *
+     * WARNING: This function should only be called from the constructor. Most
+     * applications that interact with token contracts will not expect
+     * {decimals} to ever change, and may work incorrectly if it does.
+     */
+    function _setupDecimals(uint8 decimals_) internal virtual {
+        _decimals = decimals_;
     }
 
-    //交换和液化
-    //合约代币余额
-    function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
-        // split the contract balance into halves 将合约余额分成两半
-        // 一半 = 合约代币余额 / 2
-        uint256 half = contractTokenBalance.div(2);
-        // 另一半 = 合约代币余额 - 一半
-        uint256 otherHalf = contractTokenBalance.sub(half);
+    /**
+     * @dev Hook that is called before any transfer of tokens. This includes
+     * minting and burning.
+     *
+     * Calling conditions:
+     *
+     * - when `from` and `to` are both non-zero, `amount` of ``from``'s tokens
+     * will be to transferred to `to`.
+     * - when `from` is zero, `amount` tokens will be minted for `to`.
+     * - when `to` is zero, `amount` of ``from``'s tokens will be burned.
+     * - `from` and `to` are never both zero.
+     *
+     * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
+     */
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual { }
 
-        // capture the contract's current ETH balance. 获取合约当前的 ETH 余额
-        // this is so that we can capture exactly the amount of ETH that the 这样我们就可以准确地捕捉到 ETH 的数量
-        // swap creates, and not make the liquidity event include any ETH that 掉期创建，而不是使流动性事件包括任何 ETH
-        // has been manually sent to the contract 已经手动发送到合约
-        //初始余额 = 当前合约 . 余额
-        uint256 initialBalance = address(this).balance;
 
-        // swap tokens for ETH 将代币换成 ETH
-
-        swapTokensForEth(half);
-        // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
-        // <- 这会破坏 ETH -> 当交换 + 液化被触发时 HATE 交换
-        // how much ETH did we just swap into?
-        // 我们刚换了多少ETH？
-        //新余额 = 当前合约余额 - 初始余额
-        uint256 newBalance = address(this).balance.sub(initialBalance);
-
-        // add liquidity to uniswap
-        // 为 Uniswap 增加流动性
-        addLiquidity(otherHalf, newBalance);
-
-        emit SwapAndLiquify(half, newBalance, otherHalf);
+    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
+        (uint256 tTransferAmount,uint256 tFee) = _getTValues(tAmount);
+        (uint256 rAmount,uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, _userSupply / _totalSupply);
+        return (rAmount, rTransferAmount, tFee, tTransferAmount, rFee);
     }
 
-    //将代币换成 Eth
-    //代币数量
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> weth 生成 token -> weth 的 Uniswap 对路径
-        // 小路 = 两位空地址
-        address[] memory path = new address[](2);
-        //小路0 = 当前合约
-        path[0] = address(this);
-        //小路1 = uniswapV2Router.WETH();
-        path[1] = uniswapV2Router.WETH();
-
-        //_批准(当前合约，address(uniswapV2Router),代币数量)
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        // make the swap  进行交换
-        //uniswapV2Router.将确切代币换成 ETH 转账代币支持费(代币数量,0,小路,当前合约.区块时间戳)
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            address(this),
-            block.timestamp
-        );
+    function _getTValues(uint256 tAmount) private view returns (uint256, uint256) {
+        uint256 tFee = tAmount.mul(_taxFee).div(10 ** 2);
+        uint256 tTransferAmount = tAmount;
+        return (tTransferAmount, tFee);
     }
 
-    //增加流动性
-    //代币数量 以太币数量
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        // approve token transfer to cover all possible scenarios 批准令牌转移以涵盖所有可能的情况
-        //_批准(当前合约，address(uniswapV2Router),代币数量)
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        // add the liquidity 增加流动性
-        // uniswapV2Router.添加流动性 ETH{value:以太币数量}(当前合约，代币数量，0，0，当前合约拥有者，当前区块时间戳)
-        uniswapV2Router.addLiquidityETH{value : ethAmount}(
-            address(this),
-            tokenAmount,
-            0, // slippage is unavoidable
-            0, // slippage is unavoidable
-            owner(),
-            block.timestamp
-        );
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
+        uint256 rFee = tFee.mul(currentRate);
+        uint256 rAmount = tAmount.mul(currentRate);
+        uint256 rTransferAmount = rAmount.sub(rFee);
+        return (rAmount, rTransferAmount, rFee);
     }
 
-    //this method is responsible for taking all fee, if takeFee is true
-    //此方法负责收取所有费用，如果 takeFee 为真
-    //_token转账
-    //发件人 接受者 数量 收取费用
-    function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeFee) private {
-        //如果 ！收取费用
-        if (!takeFee)
-        //删除所有费用
-            removeAllFee();
-        //如果 发件人 _被排除 与 接受者 ！ _被排除
-        if (_isExcluded[sender] && !_isExcluded[recipient]) {
-            //_从排除转移(发件人,接受者,数量)
-            _transferFromExcluded(sender, recipient, amount);
-            //如果 发件人 ! _被排除 与 接受者 发件人
-        } else if (!_isExcluded[sender] && _isExcluded[recipient]) {
-            //_转移到排除(发件人,接受者,数量)
-            _transferToExcluded(sender, recipient, amount);
-            //如果 发件人 ! _被排除 与 接受者 ! _被排除
-        } else if (!_isExcluded[sender] && !_isExcluded[recipient]) {
-            //_转移标准(发件人,接受者,数量)
-            _transferStandard(sender, recipient, amount);
-            //如果 发件人 _被排除 与 接受者 _被排除
-        } else if (_isExcluded[sender] && _isExcluded[recipient]) {
-            //_转账两者都排除(发件人,接受者,数量)
-            _transferBothExcluded(sender, recipient, amount);
-            //否则
-        } else {
-            //_转移标准(发件人,接受者,数量)
-            _transferStandard(sender, recipient, amount);
-        }
-
-        //如果 !收取费用
-        if (!takeFee)
-        //恢复所有费用
-            restoreAllFee();
-    }
-
-    //_转移标准
-    //发件人 接受者 t金额
-    function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        //r金额,r转账金额,r费用,t转账金额,t费用,t流动性 = _获取值(t金额)
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
-        //发件人 _r拥有 = 发件人 _r拥有 - r金额
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        //接受者 _r拥有 = 接受者 _r拥有 + r转账金额
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        //_取流动性(t流动性)
-        _takeLiquidity(tLiquidity);
-        //_反映费用(r费用,t费用)
-        _reflectFee(rFee, tFee);
-        //触发 转账事件(发件人,接受者,t转账金额)
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    //_转移到排除
-    // 发件人 接受者 t金额
-    function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
-        //r金额，r转账金额，r费用，t转账金额，t费用，t流动性 = _获取值(t金额)
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
-        //发件人 _r拥有 = 发件人 _r拥有 - r金额
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        //接受者 _t拥有 = 接受者 _t拥有 + t转账金额
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        //接受者 _r拥有 = 接受者 _r拥有 + r转账金额
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        //_取流动性(t流动性)
-        _takeLiquidity(tLiquidity);
-        //_反映费用(r费用,t费用)
-        _reflectFee(rFee, tFee);
-        //触发 转账事件(发件人,接受者,t转账金额)
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    //_从排除转移
-    //发件人 接受者 t金额
-    function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
-        // r金额,r转账金额,r费用,t转账金额,t费用,t流动性 = _获取值(t金额)
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
-        //发件人 _t拥有 = 发件人 _t拥有 - t金额
-        _tOwned[sender] = _tOwned[sender].sub(tAmount);
-        //发件人 _r拥有 = 发件人 _r拥有 - r金额
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        //接受者 _r拥有 = 接受者 _r拥有 + r转账金额
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        //_拿流动性(t流动性)
-        _takeLiquidity(tLiquidity);
-        //反映费(r费用,t费用)
-        _reflectFee(rFee, tFee);
-        //触发 转账事件(发件人,接受者,t转账金额)
-        emit Transfer(sender, recipient, tTransferAmount);
+    function _reflectFee(uint256 rFee) private {
+        _userSupply = _userSupply.sub(rFee);
     }
 }
