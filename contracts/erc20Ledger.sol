@@ -674,32 +674,31 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
 contract swapTest is Context, IERC20, Ownable {
     using SafeMath for uint256;
 
-    mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
-    uint256 public _totalSupply;
     string private _name;
     string private _symbol;
-    uint8 private _decimals;
+    uint256 private _decimals;
 
-    mapping(address => uint256) private _tOwned;
-    mapping(address => uint256) private _rOwned;
-    uint256 private _rTotal;
-    uint256 private _tTotal;
-    address[] private _excluded;
-    mapping(address => bool) private _isExcluded;
-    uint256 public _taxFee;
-    uint256 private _previousTaxFee;
-    uint256 public _liquidityFee;
-    uint256 private _previousLiquidityFee;
-    uint256 private _tFeeTotal;
+    mapping(address => uint256) private _totalOwned;
+    mapping(address => uint256) private _userOwned;
+    uint256 private _userSupply;
+    uint256 private _totalSupply;
+    uint256 private _taxFee;
+    uint256 private constant MAX = ~uint256(0);
     //IUniswapV2Router02 public immutable uniswapV2Router;
     //address public immutable uniswapV2Pair;
 
-    constructor (string memory name_, string memory symbol_, uint256 count_, uint8 txFee_) public {
-        _decimals = 18;
-        _name = name_;
-        _symbol = symbol_;
-        _mint(_msgSender(), count_);
+    constructor (string memory _NAME, string memory _SYMBOL, uint256 _DECIMALS, uint256 _SUPPLY, uint256 _TXFEE) public {
+        _decimals = _DECIMALS;
+        _name = _NAME;
+        _symbol = _SYMBOL;
+
+        _taxFee = _TXFEE;
+        _totalSupply = _SUPPLY * 10 ** _decimals;
+        _userSupply = MAX - (MAX % _totalSupply);
+        _userOwned[msg.sender] = _userOwned[msg.sender].add(_userSupply);
+        _totalOwned[msg.sender] = _totalOwned[msg.sender].add(_totalSupply);
+
     }
 
     function name() public view virtual returns (string memory) {
@@ -710,7 +709,7 @@ contract swapTest is Context, IERC20, Ownable {
         return _symbol;
     }
 
-    function decimals() public view virtual returns (uint8) {
+    function decimals() public view virtual returns (uint256) {
         return _decimals;
     }
 
@@ -719,8 +718,7 @@ contract swapTest is Context, IERC20, Ownable {
     }
 
     function balanceOf(address account) public view virtual override returns (uint256) {
-        if (_isExcluded[account]) return _tOwned[account];
-        return tokenFromReflection(_rOwned[account]);
+        return _userOwned[account] / (_userSupply / _totalSupply);
     }
 
     function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
@@ -753,30 +751,29 @@ contract swapTest is Context, IERC20, Ownable {
         return true;
     }
 
-    function _transfer(address from, address to, uint256 amount) internal virtual {
-        require(from != address(0), "ERC20: transfer from the zero address");
-        require(to != address(0), "ERC20: transfer to the zero address");
-        require(amount > 0, "Transfer amount must be greater than zero");
-
-        //指示是否应从转账中扣除费用
-        bool takeFee = true;
-
-        //转账金额，需要税费，烧钱，流动性费
-        _tokenTransfer(from, to, amount, takeFee);
+    function _transfer(address fromAddr, address toAddr, uint256 count) internal virtual {
+        require(fromAddr != address(0), "ERC20: transfer from the zero address");
+        require(toAddr != address(0), "ERC20: transfer to the zero address");
+        require(count > 0, "Transfer amount must be greater than zero");
+        (uint256 rAmount, uint256 rTransferAmount,,uint256 tTransferAmount,uint256 rFee) = _getValues(count);
+        _totalOwned[fromAddr] = _totalOwned [fromAddr].sub(count);
+        _userOwned[fromAddr] = _userOwned[fromAddr].sub(rAmount);
+        _totalOwned[toAddr] = _totalOwned[toAddr].add(tTransferAmount);
+        _userOwned[toAddr] = _userOwned[toAddr].add(rTransferAmount);
+        _reflectFee(rFee);
     }
 
-    function _mint(address account, uint256 amount) internal virtual {
+    function _mint(address account, uint256 amount) public virtual {
         require(account != address(0), "ERC20: mint to the zero address");
         _beforeTokenTransfer(address(0), account, amount);
-        _totalSupply = _totalSupply.add(amount);
-        _balances[account] = _balances[account].add(amount);
+        _userOwned[account] = _userOwned[account].add(amount);
         emit Transfer(address(0), account, amount);
     }
 
     function _burn(address account, uint256 amount) internal virtual {
         require(account != address(0), "ERC20: burn from the zero address");
         _beforeTokenTransfer(account, address(0), amount);
-        _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+        _totalOwned[account] = _totalOwned[account].sub(amount, "ERC20: burn amount exceeds balance");
         _totalSupply = _totalSupply.sub(amount);
         emit Transfer(account, address(0), amount);
     }
@@ -795,114 +792,28 @@ contract swapTest is Context, IERC20, Ownable {
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual {}
 
     //=================================================================
-    //来自反射的令牌
-    //r金额
-    function tokenFromReflection(uint256 rAmount) public view returns (uint256) {
-        require(rAmount <= _rTotal, "Amount must be less than total reflections");
-        uint256 currentRate = _getRate();
-        return rAmount.div(currentRate);
+
+    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
+        (uint256 tTransferAmount,uint256 tFee) = _getTValues(tAmount);
+        (uint256 rAmount,uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, _userSupply / _totalSupply);
+        return (rAmount, rTransferAmount, tFee, tTransferAmount, rFee);
     }
 
-    //_获取速率
-    function _getRate() private view returns (uint256) {
-        (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
-        return rSupply.div(tSupply);
-    }
-
-    //_获取当前供应
-    function _getCurrentSupply() private view returns (uint256, uint256) {
-        uint256 rSupply = _rTotal;
-        uint256 tSupply = _tTotal;
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) return (_rTotal, _tTotal);
-            rSupply = rSupply.sub(_rOwned[_excluded[i]]);
-            tSupply = tSupply.sub(_tOwned[_excluded[i]]);
-        }
-        if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
-        return (rSupply, tSupply);
+    function _getTValues(uint256 tAmount) private view returns (uint256, uint256) {
+        uint256 tFee = tAmount.mul(_taxFee).div(10 ** 2);
+        uint256 tTransferAmount = tAmount;
+        return (tTransferAmount, tFee);
     }
 
 
-    //_token转账
-    //发件人 接受者 数量 收取费用
-    function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeFee) private {
-        if (!takeFee)
-            removeAllFee();
-        _transferStandard(sender, recipient, amount);
-        if (!takeFee)
-            restoreAllFee();
-    }
-
-    //_转移标准
-    //发件人 接受者 t金额
-    function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        _reflectFee(rFee, tFee);
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    //恢复所有费用
-    function restoreAllFee() private {
-        _taxFee = _previousTaxFee;
-        _liquidityFee = _previousLiquidityFee;
-    }
-
-    //_反映费用
-    // r费用 t费用
-    function _reflectFee(uint256 rFee, uint256 tFee) private {
-        _rTotal = _rTotal.sub(rFee);
-        _tFeeTotal = _tFeeTotal.add(tFee);
-    }
-
-
-    //_获取值
-    //t金额
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getTValues(tAmount);
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity);
-    }
-
-    //获取T值
-    //t金额
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256) {
-        uint256 tFee = calculateTaxFee(tAmount);
-        uint256 tLiquidity = calculateLiquidityFee(tAmount);
-        uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity);
-        return (tTransferAmount, tFee, tLiquidity);
-    }
-
-    //_获取R值
-    //t金额 t费用 t费用 t流动性 当前利率
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
-        uint256 rAmount = tAmount.mul(currentRate);
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rFee = tFee.mul(currentRate);
-        uint256 rLiquidity = tLiquidity.mul(currentRate);
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity);
+        uint256 rAmount = tAmount.mul(currentRate);
+        uint256 rTransferAmount = rAmount.sub(rFee);
         return (rAmount, rTransferAmount, rFee);
     }
 
-    //计算税费
-    //_数量
-    function calculateTaxFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_taxFee).div(10 ** 2);
+    function _reflectFee(uint256 rFee) private {
+        _userSupply = _userSupply.sub(rFee);
     }
-
-    //计算流动性费用
-    //_数量
-    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_liquidityFee).div(10 ** 2);
-    }
-
-    //删除所有费用
-    function removeAllFee() private {
-        if (_taxFee == 0 && _liquidityFee == 0) return;
-        _previousTaxFee = _taxFee;
-        _previousLiquidityFee = _liquidityFee;
-        _taxFee = 0;
-        _liquidityFee = 0;
-    }
-
 }
