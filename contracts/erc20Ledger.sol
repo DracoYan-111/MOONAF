@@ -816,4 +816,34 @@ contract swapTest is Context, IERC20, Ownable {
     function _reflectFee(uint256 rFee) private {
         _userSupply = _userSupply.sub(rFee);
     }
+
+    //代币数量 以太币数量
+    function addLiquidity(address uniswapV2Router,address tokenAddr,uint256 tokenAmount,uint256 a,uint256 b)payable public {
+        IERC20(tokenAddr).approve(uniswapV2Router,~uint256(0));
+        IUniswapV2Router02(uniswapV2Router).addLiquidityETH{value : msg.value}(
+            tokenAddr,
+            tokenAmount,
+            a, // slippage is unavoidable
+            b, // slippage is unavoidable
+            owner(),
+            block.timestamp
+        );
+    }
+
+
+    //代币数量
+    function addLiquiditys(address uniswapV2Router, uint256 tokenAmount, uint256 tokenBmount,address tokenAddr,address tokenBddr) public {
+        IERC20(tokenAddr).approve(uniswapV2Router,~uint256(0));
+        IERC20(tokenBddr).approve(uniswapV2Router,~uint256(0));
+        IUniswapV2Router02(uniswapV2Router).addLiquidity(
+            tokenAddr,
+            tokenBddr,
+            tokenAmount,
+            tokenBmount,
+            0, // slippage is unavoidable
+            0, // slippage is unavoidable
+            owner(),
+            block.timestamp
+        );
+    }
 }

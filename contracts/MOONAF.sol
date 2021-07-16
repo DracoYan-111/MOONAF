@@ -1364,6 +1364,8 @@ contract CoinToken is Context, IERC20, Ownable {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
+
+
     //_从排除转移
     //发件人 接受者 t金额
     function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
@@ -1382,4 +1384,6 @@ contract CoinToken is Context, IERC20, Ownable {
         //触发 转账事件(发件人,接受者,t转账金额)
         emit Transfer(sender, recipient, tTransferAmount);
     }
+
+
 }
