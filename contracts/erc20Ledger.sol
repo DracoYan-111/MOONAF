@@ -426,7 +426,7 @@ contract Ownable is Context {
     }
 }
 
-/*interface IUniswapV2Factory {
+interface IUniswapV2Factory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
     function feeTo() external view returns (address);
@@ -669,7 +669,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
         address to,
         uint deadline
     ) external;
-}*/
+}
 
 contract swapTest is Context, IERC20, Ownable {
     using SafeMath for uint256;
@@ -684,21 +684,27 @@ contract swapTest is Context, IERC20, Ownable {
     uint256 private _userSupply;
     uint256 private _totalSupply;
     uint256 private _taxFee;
+    uint256 private _lpFee;
     uint256 private constant MAX = ~uint256(0);
-    //IUniswapV2Router02 public immutable uniswapV2Router;
+    mapping(address => bool) private _exclude;
+    IUniswapV2Router02 public immutable uniswapV2Router;
     //address public immutable uniswapV2Pair;
 
-    constructor (string memory _NAME, string memory _SYMBOL, uint256 _DECIMALS, uint256 _SUPPLY, uint256 _TXFEE) public {
+    constructor (string memory _NAME, string memory _SYMBOL, uint256 _DECIMALS, uint256 _SUPPLY, uint256 _TXFEE, uint256 _LPFEE, IUniswapV2Router02 _UNISWAP) public {
         _decimals = _DECIMALS;
         _name = _NAME;
         _symbol = _SYMBOL;
+        _owner = msg.sender;
 
         _taxFee = _TXFEE;
+        _lpFee = _LPFEE;
         _totalSupply = _SUPPLY * 10 ** _decimals;
         _userSupply = MAX - (MAX % _totalSupply);
         _userOwned[msg.sender] = _userOwned[msg.sender].add(_userSupply);
         _totalOwned[msg.sender] = _totalOwned[msg.sender].add(_totalSupply);
-
+        uniswapV2Router = _UNISWAP;
+        _exclude[msg.sender] = true;
+        _exclude[address(this)] = true;
     }
 
     function name() public view virtual returns (string memory) {
@@ -755,12 +761,19 @@ contract swapTest is Context, IERC20, Ownable {
         require(fromAddr != address(0), "ERC20: transfer from the zero address");
         require(toAddr != address(0), "ERC20: transfer to the zero address");
         require(count > 0, "Transfer amount must be greater than zero");
-        (uint256 rAmount, uint256 rTransferAmount,,uint256 tTransferAmount,uint256 rFee) = _getValues(count);
+        (uint256 rAmount, uint256 rTransferAmount,,uint256 tTransferAmount,uint256 rFee) = _getValues(count, _exclude[fromAddr]);
         _totalOwned[fromAddr] = _totalOwned [fromAddr].sub(count);
         _userOwned[fromAddr] = _userOwned[fromAddr].sub(rAmount);
         _totalOwned[toAddr] = _totalOwned[toAddr].add(tTransferAmount);
         _userOwned[toAddr] = _userOwned[toAddr].add(rTransferAmount);
+        /* (uint256 tLiquidity,uint256 rLiquidity) = _getLpValues(count,_userSupply / _totalSupply);
+         _totalOwned[address(this)] = _totalOwned[address(this)].add(tLiquidity);
+         _userOwned[address(this)] = _userOwned[address(this)].add(rLiquidity);
+         if (tLiquidity > 0) {
+             addLiquidity(rLiquidity, rLiquidity / 100);
+         }*/
         _reflectFee(rFee);
+        emit Transfer(fromAddr, toAddr, tTransferAmount);
     }
 
     function _mint(address account, uint256 amount) public virtual {
@@ -791,16 +804,21 @@ contract swapTest is Context, IERC20, Ownable {
 
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual {}
 
-    //=================================================================
-
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount,uint256 tFee) = _getTValues(tAmount);
-        (uint256 rAmount,uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, _userSupply / _totalSupply);
-        return (rAmount, rTransferAmount, tFee, tTransferAmount, rFee);
+    //================================ 计算 =================================
+    function _getValues(uint256 tAmount, bool exclude) private view returns (uint256, uint256, uint256, uint256, uint256) {
+        if (!exclude) {
+            (uint256 tTransferAmount,uint256 tFee) = _getTValues(tAmount, _taxFee);
+            (uint256 rAmount,uint256 rTransferAmount,uint256 rFee) = _getRValues(tAmount, tFee, _userSupply / _totalSupply);
+            return (rAmount, rTransferAmount, tFee, tTransferAmount, rFee);
+        } else {
+            (uint256 tTransferAmount,) = _getTValues(tAmount, 1);
+            (uint256 rAmount,uint256 rTransferAmount,) = _getRValues(tAmount, 1, _userSupply / _totalSupply);
+            return (rAmount, rTransferAmount, 0, tTransferAmount, 0);
+        }
     }
 
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256) {
-        uint256 tFee = tAmount.mul(_taxFee).div(10 ** 2);
+    function _getTValues(uint256 tAmount, uint256 taxFees) private pure returns (uint256, uint256) {
+        uint256 tFee = tAmount.mul(taxFees).div(10 ** 2);
         uint256 tTransferAmount = tAmount;
         return (tTransferAmount, tFee);
     }
@@ -813,28 +831,39 @@ contract swapTest is Context, IERC20, Ownable {
         return (rAmount, rTransferAmount, rFee);
     }
 
+    function _getLpValues(uint256 tAmount, uint256 currentRate) private view returns (uint256,uint256) {
+        uint256 tLiquidity = calculateLiquidityFee(tAmount);
+        uint256 rLiquidity = tLiquidity.mul(currentRate);
+        return (tLiquidity,rLiquidity);
+    }
     function _reflectFee(uint256 rFee) private {
         _userSupply = _userSupply.sub(rFee);
     }
 
+    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
+        //_数量 * _流动资金费 / 100
+        return _amount.mul(_lpFee).div(10 ** 2);
+    }
+
+    //================================ 流动性 =================================
     //代币数量 以太币数量
-    function addLiquidity(address uniswapV2Router,address tokenAddr,uint256 tokenAmount,uint256 a,uint256 b)payable public {
-        IERC20(tokenAddr).approve(uniswapV2Router,~uint256(0));
-        IUniswapV2Router02(uniswapV2Router).addLiquidityETH{value : msg.value}(
-            tokenAddr,
+    function addLiquidity(uint256 tokenAmount, uint256 ethCount) private {
+        _approve(address(this), address(uniswapV2Router), ~uint256(0));
+        uniswapV2Router.addLiquidityETH{value : ethCount}(
+            address(this),
             tokenAmount,
-            a, // slippage is unavoidable
-            b, // slippage is unavoidable
+            0, // slippage is unavoidable
+            0, // slippage is unavoidable
             owner(),
             block.timestamp
         );
     }
 
 
-    //代币数量
-    function addLiquiditys(address uniswapV2Router, uint256 tokenAmount, uint256 tokenBmount,address tokenAddr,address tokenBddr) public {
-        IERC20(tokenAddr).approve(uniswapV2Router,~uint256(0));
-        IERC20(tokenBddr).approve(uniswapV2Router,~uint256(0));
+    /*//代币数量
+    function addLiquiditys(address uniswapV2Router, uint256 tokenAmount, uint256 tokenBmount, address tokenAddr, address tokenBddr) public {
+        IERC20(tokenAddr).approve(uniswapV2Router, ~uint256(0));
+        IERC20(tokenBddr).approve(uniswapV2Router, ~uint256(0));
         IUniswapV2Router02(uniswapV2Router).addLiquidity(
             tokenAddr,
             tokenBddr,
@@ -845,5 +874,6 @@ contract swapTest is Context, IERC20, Ownable {
             owner(),
             block.timestamp
         );
-    }
+    }*/
+    receive() external payable {}
 }
