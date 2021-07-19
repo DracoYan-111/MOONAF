@@ -1041,13 +1041,6 @@ contract swapTest is Context, IERC20, Ownable {
         return (tlp, tde, rlp, rde);
     }
 
-    /*function _getRFee(uint256 tlp, uint256 tde) private view returns (uint256, uint256) {
-        uint256 rlp = tlp.mul(_userSupply / _totalSupply);
-        uint256 rde = tde.mul(_userSupply / _totalSupply);
-        return (rlp, rde);
-    }*/
-
-
     //将代币换成 Eth
     //代币数量
     function swapTokensForEth(uint256 tokenAmount) private {
@@ -1068,12 +1061,7 @@ contract swapTest is Context, IERC20, Ownable {
     //增加流动性
     //代币数量 以太币数量
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        // approve token transfer to cover all possible scenarios 批准令牌转移以涵盖所有可能的情况
-        //_批准(当前合约，address(uniswapV2Router),代币数量)
         _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        // add the liquidity 增加流动性
-        // uniswapV2Router.添加流动性 ETH{value:以太币数量}(当前合约，代币数量，0，0，当前合约拥有者，当前区块时间戳)
         uniswapV2Router.addLiquidityETH{value : ethAmount}(
             address(this),
             tokenAmount,
