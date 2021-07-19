@@ -629,12 +629,6 @@ interface IUniswapV2Router01 {
 
 interface IUniswapV2Router02 is IUniswapV2Router01 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
-        address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountETHMin,
-        address to,
-        uint deadline
     ) external returns (uint amountETH);
 
     function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
@@ -674,17 +668,22 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
 contract swapTest is Context, IERC20, Ownable {
     using SafeMath for uint256;
 
-    mapping(address => uint256) private _balances;
-
+    mapping(address => uint256) private _totalOwned;
+    mapping(address => uint256) private _userOwned;
     mapping(address => mapping(address => uint256)) private _allowances;
-
+    mapping(address => bool) private _exclude;
+    uint256 private _userSupply;
     uint256 private _totalSupply;
+    uint256 private constant MAX = ~uint256(0);
 
     string private _name;
     string private _symbol;
-    uint8 private _decimals;
+    uint256 private _decimals;
+
+    uint256 private lpFee;
+    uint256 private txFee;
+    uint256 private deFee;
     IUniswapV2Router02 public immutable uniswapV2Router;
-    address public immutable uniswapV2Pair;
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
      * a default value of 18.
@@ -694,17 +693,35 @@ contract swapTest is Context, IERC20, Ownable {
      * All three of these values are immutable: they can only be set once during
      * construction.
      */
-    constructor (string memory name_, string memory symbol_, uint256 count, address routerAddress) public {
+    constructor (
+        string memory name_,
+        string memory symbol_,
+        uint256 decimals_,
+        uint256 count_,
+        uint256 lpFee_,
+        uint256 txFee_,
+        uint256 deFee_,
+        IUniswapV2Router02 uniswapV2Router_)
+    public {
         _name = name_;
         _symbol = symbol_;
-        _decimals = 18;
-        _totalSupply = count * 10 ** _decimals;
-        // 设置其余的合约变量
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(routerAddress);
-        // 为这个新令牌创建一个 uniswap 对
-        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
-        .createPair(address(this), _uniswapV2Router.WETH());
-        uniswapV2Router = _uniswapV2Router;
+        _decimals = decimals_;
+
+        lpFee = lpFee_;
+        txFee = txFee_;
+        deFee = deFee_;
+
+        _totalSupply = count_ * 10 ** _decimals;
+        _userSupply = MAX - (MAX % _totalSupply);
+
+        //_userOwned[msg.sender] = _userOwned[msg.sender].add(_userSupply);
+        _totalOwned[msg.sender] = _totalOwned[msg.sender].add(_totalSupply);
+
+        _owner = _msgSender();
+        _exclude[_msgSender()] = true;
+        _exclude[address(this)] = true;
+        uniswapV2Router = uniswapV2Router_;
+        _mint(_msgSender(), _userSupply);
     }
 
     /**
@@ -735,7 +752,7 @@ contract swapTest is Context, IERC20, Ownable {
      * no way affects any of the arithmetic of the contract, including
      * {IERC20-balanceOf} and {IERC20-transfer}.
      */
-    function decimals() public view virtual returns (uint8) {
+    function decimals() public view virtual returns (uint256) {
         return _decimals;
     }
 
@@ -750,7 +767,7 @@ contract swapTest is Context, IERC20, Ownable {
      * @dev See {IERC20-balanceOf}.
      */
     function balanceOf(address account) public view virtual override returns (uint256) {
-        return _balances[account];
+        return _userOwned[account] / (_userSupply / _totalSupply);
     }
 
     /**
@@ -840,31 +857,6 @@ contract swapTest is Context, IERC20, Ownable {
         return true;
     }
 
-    /**
-     * @dev Moves tokens `amount` from `sender` to `recipient`.
-     *
-     * This is internal function is equivalent to {transfer}, and can be used to
-     * e.g. implement automatic token fees, slashing mechanisms, etc.
-     *
-     * Emits a {Transfer} event.
-     *
-     * Requirements:
-     *
-     * - `sender` cannot be the zero address.
-     * - `recipient` cannot be the zero address.
-     * - `sender` must have a balance of at least `amount`.
-     */
-    function _transfer(address sender, address recipient, uint256 amount) internal virtual {
-        require(sender != address(0), "ERC20: transfer from the zero address");
-        require(recipient != address(0), "ERC20: transfer to the zero address");
-
-        _beforeTokenTransfer(sender, recipient, amount);
-
-        _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
-        _balances[recipient] = _balances[recipient].add(amount);
-        emit Transfer(sender, recipient, amount);
-    }
-
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
      * the total supply.
      *
@@ -879,8 +871,7 @@ contract swapTest is Context, IERC20, Ownable {
 
         _beforeTokenTransfer(address(0), account, amount);
 
-        _totalSupply = _totalSupply.add(amount);
-        _balances[account] = _balances[account].add(amount);
+        _userOwned[account] = _userOwned[account].add(amount);
         emit Transfer(address(0), account, amount);
     }
 
@@ -900,7 +891,7 @@ contract swapTest is Context, IERC20, Ownable {
 
         _beforeTokenTransfer(account, address(0), amount);
 
-        _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+        _userOwned[account] = _userOwned[account].sub(amount, "ERC20: burn amount exceeds balance");
         _totalSupply = _totalSupply.sub(amount);
         emit Transfer(account, address(0), amount);
     }
@@ -952,4 +943,150 @@ contract swapTest is Context, IERC20, Ownable {
      * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
      */
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual {}
+
+
+    /**
+     * @dev Moves tokens `amount` from `sender` to `recipient`.
+     *
+     * This is internal function is equivalent to {transfer}, and can be used to
+     * e.g. implement automatic token fees, slashing mechanisms, etc.
+     *
+     * Emits a {Transfer} event.
+     *
+     * Requirements:
+     *
+     * - `sender` cannot be the zero address.
+     * - `recipient` cannot be the zero address.
+     * - `sender` must have a balance of at least `amount`.
+     */
+    function _transfer(address sender, address recipient, uint256 amount) internal virtual {
+        require(sender != address(0), "ERC20: transfer from the zero address");
+        require(recipient != address(0), "ERC20: transfer to the zero address");
+        _beforeTokenTransfer(sender, recipient, amount);
+        uint256 tlp = 0;
+        uint256 tde = 0;
+        uint256 rlp = 0;
+        uint256 rde = 0;
+        if (!_exclude[sender]) {
+            (tlp, tde, rlp, rde) = _getFee(amount, lpFee, deFee);
+        } else {
+            (tlp, tde, rlp, rde) = _getFee(amount, 0, 0);
+        }
+        transferMain(sender, recipient, amount, tlp, tde, rlp, rde);
+        if (!_exclude[sender]) {
+            swapTokensForEth(tlp / 2);
+            uint256 initialBalance = address(this).balance;
+            addLiquidity(tlp / 2, initialBalance);
+        }
+    }
+    //==============================================================================
+
+    function transferMain(address sender, address recipient, uint256 amount, uint256 tlp, uint256 tde, uint256 rlp, uint256 rde) private {
+        (uint256 tTransferAmount,uint256 rAmount,uint256 rTransferAmount,uint256 rFee) = _getValues(amount, tlp.add(tde), rlp.add(rde), _exclude[msg.sender]);
+        _totalOwned[sender] = _totalOwned [sender].sub(amount, "ERC20: transfer amount exceeds balance");
+        _userOwned[sender] = _userOwned[sender].sub(rAmount);
+
+        _totalOwned[address(this)] = _totalOwned[address(this)] .add(tlp);
+        _userOwned[address(this)] = _userOwned[address(this)] .add(rlp);
+
+        _totalOwned[address(0)] = _totalOwned[address(0)] .add(tde);
+        _userOwned[address(0)] = _userOwned[address(0)] .add(rde);
+
+        _totalOwned[recipient] = _totalOwned[recipient].add(tTransferAmount);
+        _userOwned[recipient] = _userOwned[recipient].add(rTransferAmount);
+
+        _reflectFee(rFee);
+
+        emit Transfer(sender, recipient, tTransferAmount);
+        emit Transfer(sender, address(0), tde);
+    }
+
+
+    /**
+    * @dev 计算值
+    * @param tAmount 转账总数
+    * @param exclude 是否排除
+    */
+    function _getValues(uint256 tAmount, uint256 tfee, uint256 rfee, bool exclude) private view returns (uint256, uint256, uint256, uint256) {
+        if (!exclude) {
+            (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount, txFee, tfee);
+            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, rfee);
+            return (tTransferAmount, rAmount, rTransferAmount, rFee);
+        } else {
+            (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount, 0, tfee);
+            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, rfee);
+            return (tTransferAmount, rAmount, rTransferAmount, rFee);
+        }
+    }
+
+
+    function _getTValues(uint256 tAmount, uint256 txFe, uint256 tfee) private pure returns (uint256, uint256) {
+        uint256 tFee = tAmount.mul(txFe).div(10 ** 2);
+        uint256 tTransferAmount = tAmount.sub(tfee).sub(tFee);
+        return (tTransferAmount, tFee);
+    }
+
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 rfee) private view returns (uint256, uint256, uint256) {
+        uint256 rFee = tFee.mul(_userSupply / _totalSupply);
+        uint256 rAmount = tAmount.mul(_userSupply / _totalSupply);
+        uint256 rTransferAmount = rAmount.sub(rfee).sub(rFee);
+        return (rAmount, rTransferAmount, rFee);
+    }
+
+    function _getFee(uint256 tAmount, uint256 lpFees, uint256 deFees) private view returns (uint256, uint256, uint256, uint256) {
+        uint256 tlp = tAmount.mul(lpFees).div(10 ** 2);
+        uint256 tde = tAmount.mul(deFees).div(10 ** 2);
+        uint256 rlp = tlp.mul(_userSupply / _totalSupply);
+        uint256 rde = tde.mul(_userSupply / _totalSupply);
+        return (tlp, tde, rlp, rde);
+    }
+
+    /*function _getRFee(uint256 tlp, uint256 tde) private view returns (uint256, uint256) {
+        uint256 rlp = tlp.mul(_userSupply / _totalSupply);
+        uint256 rde = tde.mul(_userSupply / _totalSupply);
+        return (rlp, rde);
+    }*/
+
+
+    //将代币换成 Eth
+    //代币数量
+    function swapTokensForEth(uint256 tokenAmount) private {
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = uniswapV2Router.WETH();
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+
+
+    //增加流动性
+    //代币数量 以太币数量
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+        // approve token transfer to cover all possible scenarios 批准令牌转移以涵盖所有可能的情况
+        //_批准(当前合约，address(uniswapV2Router),代币数量)
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // add the liquidity 增加流动性
+        // uniswapV2Router.添加流动性 ETH{value:以太币数量}(当前合约，代币数量，0，0，当前合约拥有者，当前区块时间戳)
+        uniswapV2Router.addLiquidityETH{value : ethAmount}(
+            address(this),
+            tokenAmount,
+            0, // slippage is unavoidable
+            0, // slippage is unavoidable
+            owner(),
+            block.timestamp
+        );
+    }
+
+    function _reflectFee(uint256 rFee) private {
+        _userSupply = _userSupply.sub(rFee);
+    }
+
+    receive() external payable {}
 }
