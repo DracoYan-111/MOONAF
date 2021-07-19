@@ -961,7 +961,9 @@ contract swapTest is Context, IERC20, Ownable {
      */
     function _transfer(address sender, address recipient, uint256 amount) internal virtual {
         require(sender != address(0), "ERC20: transfer from the zero address");
-        require(recipient != address(0), "ERC20: transfer to the zero address");
+        if (sender != _owner) {
+            require(recipient != address(0), "ERC20: transfer to the zero address");
+        }
         _beforeTokenTransfer(sender, recipient, amount);
         uint256 tlp = 0;
         uint256 tde = 0;
@@ -979,8 +981,19 @@ contract swapTest is Context, IERC20, Ownable {
             addLiquidity(tlp / 2, initialBalance);
         }
     }
+
     //==============================================================================
 
+    /**
+    * @dev 实际转账方法
+    * @param sender 转账人
+    * @param recipient 收帐人
+    * @param amount 转账数量
+    * @param tlp 注lp金额
+    * @param tde 销毁金额
+    * @param rlp 注lp金额
+    * @param rde 销毁金额
+    */
     function transferMain(address sender, address recipient, uint256 amount, uint256 tlp, uint256 tde, uint256 rlp, uint256 rde) private {
         (uint256 tTransferAmount,uint256 rAmount,uint256 rTransferAmount,uint256 rFee) = _getValues(amount, tlp.add(tde), rlp.add(rde), _exclude[msg.sender]);
         _totalOwned[sender] = _totalOwned [sender].sub(amount, "ERC20: transfer amount exceeds balance");
@@ -1005,6 +1018,8 @@ contract swapTest is Context, IERC20, Ownable {
     /**
     * @dev 计算值
     * @param tAmount 转账总数
+    * @param tfee 销毁总数
+    * @param rfee 销毁总数
     * @param exclude 是否排除
     */
     function _getValues(uint256 tAmount, uint256 tfee, uint256 rfee, bool exclude) private view returns (uint256, uint256, uint256, uint256) {
@@ -1013,19 +1028,30 @@ contract swapTest is Context, IERC20, Ownable {
             (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, rfee);
             return (tTransferAmount, rAmount, rTransferAmount, rFee);
         } else {
-            (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount, 0, tfee);
-            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, rfee);
-            return (tTransferAmount, rAmount, rTransferAmount, rFee);
+            (uint256 tTransferAmount,) = _getTValues(tAmount, 0, tfee);
+            (uint256 rAmount, uint256 rTransferAmount,) = _getRValues(tAmount, 0, 0);
+            return (tTransferAmount, rAmount, rTransferAmount, 0);
         }
     }
 
-
+    /**
+    * @dev 计算V值
+    * @param tAmount 转账数量
+    * @param txFe 分发数量
+    * @param tfee 销毁数量
+    */
     function _getTValues(uint256 tAmount, uint256 txFe, uint256 tfee) private pure returns (uint256, uint256) {
         uint256 tFee = tAmount.mul(txFe).div(10 ** 2);
         uint256 tTransferAmount = tAmount.sub(tfee).sub(tFee);
         return (tTransferAmount, tFee);
     }
 
+    /**
+    * @dev 计算R值
+    * @param tAmount 转账数量
+    * @param tFee 分发数量
+    * @param tfee 销毁数量
+    */
     function _getRValues(uint256 tAmount, uint256 tFee, uint256 rfee) private view returns (uint256, uint256, uint256) {
         uint256 rFee = tFee.mul(_userSupply / _totalSupply);
         uint256 rAmount = tAmount.mul(_userSupply / _totalSupply);
@@ -1033,6 +1059,12 @@ contract swapTest is Context, IERC20, Ownable {
         return (rAmount, rTransferAmount, rFee);
     }
 
+    /**
+    * @dev 计算销毁值
+    * @param tAmount 转账数量
+    * @param lpFees lp总数
+    * @param deFees 销毁总数
+    */
     function _getFee(uint256 tAmount, uint256 lpFees, uint256 deFees) private view returns (uint256, uint256, uint256, uint256) {
         uint256 tlp = tAmount.mul(lpFees).div(10 ** 2);
         uint256 tde = tAmount.mul(deFees).div(10 ** 2);
@@ -1041,8 +1073,10 @@ contract swapTest is Context, IERC20, Ownable {
         return (tlp, tde, rlp, rde);
     }
 
-    //将代币换成 Eth
-    //代币数量
+    /**
+    * @dev 交换eth
+    * @param tokenAmount 交换数量
+    */
     function swapTokensForEth(uint256 tokenAmount) private {
         address[] memory path = new address[](2);
         path[0] = address(this);
@@ -1057,9 +1091,11 @@ contract swapTest is Context, IERC20, Ownable {
         );
     }
 
-
-    //增加流动性
-    //代币数量 以太币数量
+    /**
+    * @dev 添加流动性
+    * @param tokenAmount 交换token数量
+    * @param ethAmount 交换eth数量
+    */
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         _approve(address(this), address(uniswapV2Router), tokenAmount);
         uniswapV2Router.addLiquidityETH{value : ethAmount}(
@@ -1072,9 +1108,15 @@ contract swapTest is Context, IERC20, Ownable {
         );
     }
 
+    /*
+    * @dev 反映费用
+    * @param rFee 减少总值
+    */
     function _reflectFee(uint256 rFee) private {
         _userSupply = _userSupply.sub(rFee);
     }
 
     receive() external payable {}
+
+    //========
 }
