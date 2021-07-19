@@ -1012,6 +1012,8 @@ contract swapTest is Context, IERC20, Ownable {
 
         emit Transfer(sender, recipient, tTransferAmount);
         emit Transfer(sender, address(0), tde);
+        emit Transfer(sender, address(this), tlp);
+
     }
 
 
@@ -1022,7 +1024,7 @@ contract swapTest is Context, IERC20, Ownable {
     * @param rfee 销毁总数
     * @param exclude 是否排除
     */
-    function _getValues(uint256 tAmount, uint256 tfee, uint256 rfee, bool exclude) private view returns (uint256, uint256, uint256, uint256) {
+    function _getValues(uint256 tAmount, uint256 tfee, uint256 rfee, bool exclude) public view returns (uint256, uint256, uint256, uint256) {
         if (!exclude) {
             (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount, txFee, tfee);
             (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, rfee);
@@ -1040,7 +1042,7 @@ contract swapTest is Context, IERC20, Ownable {
     * @param txFe 分发数量
     * @param tfee 销毁数量
     */
-    function _getTValues(uint256 tAmount, uint256 txFe, uint256 tfee) private pure returns (uint256, uint256) {
+    function _getTValues(uint256 tAmount, uint256 txFe, uint256 tfee) public pure returns (uint256, uint256) {
         uint256 tFee = tAmount.mul(txFe).div(10 ** 2);
         uint256 tTransferAmount = tAmount.sub(tfee).sub(tFee);
         return (tTransferAmount, tFee);
@@ -1050,9 +1052,9 @@ contract swapTest is Context, IERC20, Ownable {
     * @dev 计算R值
     * @param tAmount 转账数量
     * @param tFee 分发数量
-    * @param tfee 销毁数量
+    * @param rfee 销毁数量
     */
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 rfee) private view returns (uint256, uint256, uint256) {
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 rfee) public view returns (uint256, uint256, uint256) {
         uint256 rFee = tFee.mul(_userSupply / _totalSupply);
         uint256 rAmount = tAmount.mul(_userSupply / _totalSupply);
         uint256 rTransferAmount = rAmount.sub(rfee).sub(rFee);
@@ -1065,7 +1067,7 @@ contract swapTest is Context, IERC20, Ownable {
     * @param lpFees lp总数
     * @param deFees 销毁总数
     */
-    function _getFee(uint256 tAmount, uint256 lpFees, uint256 deFees) private view returns (uint256, uint256, uint256, uint256) {
+    function _getFee(uint256 tAmount, uint256 lpFees, uint256 deFees) public view returns (uint256, uint256, uint256, uint256) {
         uint256 tlp = tAmount.mul(lpFees).div(10 ** 2);
         uint256 tde = tAmount.mul(deFees).div(10 ** 2);
         uint256 rlp = tlp.mul(_userSupply / _totalSupply);
@@ -1117,6 +1119,24 @@ contract swapTest is Context, IERC20, Ownable {
     }
 
     receive() external payable {}
+    /*uint256 private lpFee;
+        uint256 private txFee;
+        uint256 private deFee*/
+    //==============================================================================
+    function addExclude(address useraddr) public onlyOwner{
+        _exclude[useraddr] = true;
+    }
 
-    //========
+    function setLpFee(uint256 lpFee_) public onlyOwner{
+        lpFee = lpFee_;
+    }
+
+    function addTxFee(uint256 txFee_) public onlyOwner{
+        txFee = txFee_;
+    }
+
+    function addExclude(uint256 deFee_) public onlyOwner{
+        deFee = deFee_;
+    }
+
 }

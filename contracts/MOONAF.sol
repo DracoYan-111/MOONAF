@@ -892,7 +892,7 @@ contract CoinToken is Context, IERC20, Ownable {
     //从奖励中排除
     //帐户
     function excludeFromReward(address account) public onlyOwner() {
-        // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Uniswap router.');
+        // require(account !=    , 'We can not exclude Uniswap router.');
         //如果 帐户 不是 _被排除，否则：帐户已被排除
         require(!_isExcluded[account], "Account is already excluded");
         //如果  账户 _r拥有 大于 0
