@@ -739,7 +739,7 @@ contract swapTest is Context, IERC20, Ownable {
      * no way affects any of the arithmetic of the contract, including
      * {IERC20-balanceOf} and {IERC20-transfer}.
      */
-    function decimals() public view virtual returns (uint8) {
+    function decimals() public view virtual returns (uint256) {
         return _decimals;
     }
 
@@ -873,8 +873,8 @@ contract swapTest is Context, IERC20, Ownable {
             uint256 initialBalance = address(this).balance;
             addLiquidity(lpFees / 2, initialBalance);
         }
-        emit Transfer(sender, recipient, lpFeess);
-
+        emit Transfer(sender, recipient, lp.sub(deFees));
+        emit Transfer(sender, address(0), deFees);
     }
 
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
@@ -992,7 +992,6 @@ contract swapTest is Context, IERC20, Ownable {
         if (exclude) {
             return (0);
         } else {
-            //_数量 * _流动资金费 / 100
             uint256 de = _amount.mul(deFee).div(10 ** 2);
             return (de);
 
