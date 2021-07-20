@@ -1192,6 +1192,7 @@ contract CoinToken is Context, IERC20, Ownable {
         if (
             overMinTokenBalance &&
             !inSwapAndLiquify &&
+            !inSwapAndLiquify &&
             from != uniswapV2Pair &&
             swapAndLiquifyEnabled
         ) {
@@ -1278,9 +1279,9 @@ contract CoinToken is Context, IERC20, Ownable {
         // approve token transfer to cover all possible scenarios 批准令牌转移以涵盖所有可能的情况
         //_批准(当前合约，address(uniswapV2Router),代币数量)
         _approve(address(this), address(uniswapV2Router), tokenAmount);
-
         // add the liquidity 增加流动性
         // uniswapV2Router.添加流动性 ETH{value:以太币数量}(当前合约，代币数量，0，0，当前合约拥有者，当前区块时间戳)
+
         uniswapV2Router.addLiquidityETH{value : ethAmount}(
             address(this),
             tokenAmount,
@@ -1289,6 +1290,7 @@ contract CoinToken is Context, IERC20, Ownable {
             owner(),
             block.timestamp
         );
+
     }
 
     //this method is responsible for taking all fee, if takeFee is true
